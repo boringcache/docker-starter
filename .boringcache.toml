@@ -1,0 +1,11 @@
+workspace = "boringcache/docker-starter"
+
+[adapters.docker]
+tag = "docker-starter-php85"
+no-git = true
+fail-on-cache-error = true
+command = [
+  "docker", "buildx", "bake",
+  "--file", ".github/boringcache-bake.hcl",
+  "--load", "builder", "frontend",
+]
