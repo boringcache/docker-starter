@@ -1,9 +1,14 @@
-name: Docker cache fresh validation
-run-name: Docker cache fresh validation (${{ inputs.providers }})
+name: Docker cache commit validation
+run-name: Docker cache ${{ inputs.phase }} validation (${{ inputs.providers }})
 
 on:
   workflow_dispatch:
     inputs:
+      phase:
+        description: Upstream commit build or restore-only repeat
+        type: choice
+        options: [commit, warm]
+        default: commit
       providers:
         description: Providers to run
         type: choice
@@ -24,7 +29,7 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.provider }} PHP85 cold
+    name: ${{ matrix.provider }} PHP85 ${{ inputs.phase }}
     if: github.repository == 'boringcache/docker-starter' && github.ref == 'refs/heads/boringcache-validation'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -44,31 +49,6 @@ jobs:
       - uses: ./.github/actions/docker-validation
         with:
           provider: ${{ matrix.provider }}
-          phase: cold
-          cli_version: ${{ inputs.cli_version }}
-          github_token: ${{ github.token }}
-
-  warm:
-    name: ${{ matrix.provider }} PHP85 warm
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      id-token: write
-      packages: read
-    strategy:
-      fail-fast: false
-      matrix:
-        provider: ${{ fromJSON(inputs.providers == 'baselines' && '["Registry","GitHub"]' || inputs.providers == 'boringcache' && '["BoringCache"]' || '["BoringCache","Registry","GitHub"]') }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: ./.github/actions/docker-validation
-        with:
-          provider: ${{ matrix.provider }}
-          phase: warm
+          phase: ${{ inputs.phase }}
           cli_version: ${{ inputs.cli_version }}
           github_token: ${{ github.token }}

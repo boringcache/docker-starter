@@ -9,9 +9,10 @@ Run **Connect BoringCache** once and approve the isolated
 `boringcache-validation` branch. Measured runs use GitHub OIDC and short-lived
 credentials through the pinned BoringCache One Action.
 
-Run **Docker cache validation** with `phase=fresh` to seed both image targets
+Run **Docker cache fresh validation** to seed both image targets
 and consume their caches on fresh runners. Warm BoringCache jobs are
-restore-only and fail on missing cache or cache errors. Run `phase=commit`
+restore-only and fail on missing cache or cache errors. Run
+**Docker cache commit validation** with `phase=commit`
 after advancing `.github/boringcache-source` and the matching upstream source
 tree; all providers publish their resulting caches. `phase=warm` can repeat
 the unchanged-source check on a fresh runner.
