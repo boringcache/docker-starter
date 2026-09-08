@@ -1,0 +1,120 @@
+name: Validate Docker Starter cache
+description: Build and check the upstream PHP builder and frontend images.
+inputs:
+  provider:
+    description: BoringCache, Registry, or GitHub
+    required: true
+  phase:
+    description: cold, warm, or commit
+    required: true
+  cli_version:
+    description: Optional exact BoringCache CLI release or prerelease tag
+    default: ''
+  github_token:
+    description: Repository token for the isolated GHCR cache
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Record source and build inputs
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+        PHASE: ${{ inputs.phase }}
+      run: |
+        mkdir -p validation-results
+        source_commit=$(cat .github/boringcache-source)
+        git diff --exit-code "$source_commit" -- infrastructure application tools .castor castor.php
+        jq -n --arg source "$source_commit" --arg validation "$GITHUB_SHA" \
+          --arg provider "$PROVIDER" --arg phase "$PHASE" --arg run "$GITHUB_RUN_ID" \
+          '{source_commit: $source, validation_commit: $validation, provider: $provider, phase: $phase, run_id: $run, php_version: "8.5", platform: "linux/amd64"}' \
+          > validation-results/source.json
+        docker version > validation-results/docker-version.txt
+        docker buildx version > validation-results/buildx-version.txt
+        docker buildx bake -f .github/boringcache-bake.hcl --print builder frontend > validation-results/bake.json
+
+    - name: Start build boundary timer
+      shell: bash
+      run: date +%s > validation-results/build-start.txt
+
+    - name: Set up baseline Buildx
+      if: inputs.provider != 'BoringCache'
+      uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+    - name: Log in to isolated registry cache
+      if: inputs.provider == 'Registry'
+      shell: bash
+      env:
+        REGISTRY_TOKEN: ${{ inputs.github_token }}
+      run: printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+    - name: Build with BoringCache
+      if: inputs.provider == 'BoringCache'
+      id: cache
+      uses: boringcache/one@e4ead12dabc993eba201c402a82e396166dade03 # v1.20.4
+      with:
+        cli-version: ${{ inputs.cli_version }}
+        mode: docker
+        trust-policy: ${{ inputs.phase == 'warm' && 'restore' || 'publish' }}
+        fail-on-cache-error: true
+        fail-on-cache-miss: ${{ inputs.phase == 'warm' }}
+
+    - name: Build with registry cache
+      if: inputs.provider == 'Registry'
+      uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+      with:
+        source: .
+        files: .github/boringcache-bake.hcl
+        targets: builder,frontend
+        load: true
+        set: |
+          ${{ inputs.phase != 'cold' && 'builder.cache-from=type=registry,ref=ghcr.io/boringcache/docker-starter-validation/builder:cache' || '' }}
+          ${{ inputs.phase != 'cold' && 'frontend.cache-from=type=registry,ref=ghcr.io/boringcache/docker-starter-validation/frontend:cache' || '' }}
+          ${{ inputs.phase != 'warm' && 'builder.cache-to=type=registry,ref=ghcr.io/boringcache/docker-starter-validation/builder:cache,mode=max' || '' }}
+          ${{ inputs.phase != 'warm' && 'frontend.cache-to=type=registry,ref=ghcr.io/boringcache/docker-starter-validation/frontend:cache,mode=max' || '' }}
+
+    - name: Build with GitHub cache
+      if: inputs.provider == 'GitHub'
+      uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b # v7.3.0
+      with:
+        source: .
+        files: .github/boringcache-bake.hcl
+        targets: builder,frontend
+        load: true
+        set: |
+          ${{ inputs.phase != 'cold' && 'builder.cache-from=type=gha,scope=docker-starter-php85-builder' || '' }}
+          ${{ inputs.phase != 'cold' && 'frontend.cache-from=type=gha,scope=docker-starter-php85-frontend' || '' }}
+          ${{ inputs.phase != 'warm' && 'builder.cache-to=type=gha,scope=docker-starter-php85-builder,mode=max' || '' }}
+          ${{ inputs.phase != 'warm' && 'frontend.cache-to=type=gha,scope=docker-starter-php85-frontend,mode=max' || '' }}
+
+    - name: Record build boundary duration
+      if: always()
+      shell: bash
+      run: |
+        start=$(cat validation-results/build-start.txt)
+        elapsed=$(( $(date +%s) - start ))
+        printf '%s\n' "$elapsed" > validation-results/build-seconds.txt
+        printf 'Build boundary including setup, cache transfers, and local image load: %s seconds\n' "$elapsed" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Check both built images
+      shell: bash
+      run: |
+        docker run --rm docker-starter-builder:validation bash -ec \
+          'php -v; phpize --version; composer --version; node --version; git --version; make --version' \
+          | tee validation-results/builder-check.txt
+        docker run --rm docker-starter-frontend:validation bash -ec \
+          'php -v; nginx -t' | tee validation-results/frontend-check.txt
+        docker image inspect docker-starter-builder:validation docker-starter-frontend:validation \
+          > validation-results/images.json
+
+    - name: Retain source, timing, and product evidence
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.provider }}-${{ inputs.phase }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: |
+          validation-results/
+          ${{ steps.cache.outputs.evidence-path }}
+        include-hidden-files: true
+        retention-days: 30

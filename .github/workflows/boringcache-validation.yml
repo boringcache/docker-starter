@@ -1,0 +1,80 @@
+name: Docker cache validation
+run-name: Docker cache validation (${{ inputs.phase }}, ${{ inputs.providers }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Fresh cold/warm pair, restore-only warm, or upstream commit build
+        type: choice
+        options: [fresh, warm, commit]
+        default: fresh
+      providers:
+        description: Providers to run
+        type: choice
+        options: [all, baselines, boringcache]
+        default: all
+      cli_version:
+        description: Optional exact BoringCache CLI release or prerelease tag
+        type: string
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-starter-cache-validation
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: ${{ matrix.provider }} PHP85 ${{ inputs.phase == 'fresh' && 'cold' || inputs.phase }}
+    if: github.repository == 'boringcache/docker-starter' && github.ref == 'refs/heads/boringcache-validation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJSON(inputs.providers == 'baselines' && '["Registry","GitHub"]' || inputs.providers == 'boringcache' && '["BoringCache"]' || '["BoringCache","Registry","GitHub"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/docker-validation
+        with:
+          provider: ${{ matrix.provider }}
+          phase: ${{ inputs.phase == 'fresh' && 'cold' || inputs.phase }}
+          cli_version: ${{ inputs.cli_version }}
+          github_token: ${{ github.token }}
+
+  warm:
+    name: ${{ matrix.provider }} PHP85 warm
+    needs: build
+    if: inputs.phase == 'fresh'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: ${{ fromJSON(inputs.providers == 'baselines' && '["Registry","GitHub"]' || inputs.providers == 'boringcache' && '["BoringCache"]' || '["BoringCache","Registry","GitHub"]') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/docker-validation
+        with:
+          provider: ${{ matrix.provider }}
+          phase: warm
+          cli_version: ${{ inputs.cli_version }}
+          github_token: ${{ github.token }}
