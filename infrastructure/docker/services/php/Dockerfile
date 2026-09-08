@@ -95,7 +95,6 @@ RUN apt-get update \
         "make" \
         "nodejs" \
         "php${PHP_VERSION}-dev" \
-        "sudo" \
         "unzip" \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* \
@@ -103,13 +102,15 @@ RUN apt-get update \
     && yarn set version stable
 
 # Install a fake sudo command
-# This is commented out by default because it exposes a security risk if you use this image in production, but it may be useful for development
+# The real `sudo` refuses to work because the container runs as the host's
+# raw UID, which has no /etc/passwd entry. This is a security risk if you use
+# this image in production, but it's fine for the dev-only builder image.
 # Use it at your own risk
 # COPY base/sudo.sh /usr/local/bin/sudo
-# RUN curl -L https://github.com/tianon/gosu/releases/download/1.16/gosu-amd64 -o /usr/local/bin/gosu && \
-#    chmod u+s /usr/local/bin/gosu && \
-#    chmod +x /usr/local/bin/gosu && \
-#    chmod +x /usr/local/bin/sudo
+# RUN curl -L https://github.com/tianon/gosu/releases/download/1.16/gosu-amd64 -o /usr/local/bin/gosu \
+#     && chmod u+s /usr/local/bin/gosu \
+#     && chmod +x /usr/local/bin/gosu \
+#     && chmod +x /usr/local/bin/sudo
 
 # Config
 COPY builder/php-configuration /etc/php/${PHP_VERSION}
