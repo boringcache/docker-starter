@@ -75,8 +75,10 @@ variation, plus differences between the BuildKit implementations, limit
 attribution from these single samples. The One v1.21.0 check above confirms
 restoration of the earlier cache; it is not a replacement timing comparison.
 
-All 24 measured image builds and image checks passed. The original GitHub
-cold job failed during artifact upload after its image checks and cache exports
+All 24 original validation jobs completed both image builds and their tool
+checks. This includes three extra unchanged-source repeats, which are excluded
+from the five-change timing totals. Twenty-three jobs passed overall; the
+GitHub cold job failed during artifact upload after its checks and cache exports
 succeeded. That job failure is retained separately from build success.
 
 All three providers restored the unchanged package-install layer. The
