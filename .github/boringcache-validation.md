@@ -48,8 +48,18 @@ remain as upstream supplied them and may resolve differently over time.
 
 ## Results checked September 9, 2026
 
-The current integration pins One v1.21.0 to
-`90111526eb218a7f1e119ac2b29f765bd4d82734`, using CLI v1.21.0. Its
+The current integration pins One v1.30.0 to
+`a610ec5a564efd9b360925056dbade04deb5def6`, using its default CLI v1.30.0.
+Its [restore-only release check](https://github.com/boringcache/docker-starter/actions/runs/34345898461)
+passed at validation commit `1a62162c4cec8433ea7b1e03e6a3d3713fe5011a`:
+41 seconds for the full job and 22 seconds at the build boundary. The CLI
+reported 19 seconds for Docker mode. Both image checks passed and the
+builder's package-install layer was cached. The native plan allowed no cache
+writes and contained no cache-export arguments. These are different timing
+boundaries; this check establishes reuse of the earlier cache after upgrading.
+
+The earlier One v1.21.0 integration used
+`90111526eb218a7f1e119ac2b29f765bd4d82734` and CLI v1.21.0. Its
 [read-only release check](https://github.com/boringcache/docker-starter/actions/runs/34315443215)
 passed at validation commit `722770169aa80725f3e452b3f47f82208ea5f65f`:
 37 seconds for the job, 26 seconds at the build boundary, and 23.2 seconds for
@@ -72,8 +82,8 @@ then produced these full job times:
 The five jobs total 197 seconds for BoringCache, 240 for GHCR and 264 for
 GitHub cache. BoringCache was not faster in every row. Runner and network
 variation, plus differences between the BuildKit implementations, limit
-attribution from these single samples. The One v1.21.0 check above confirms
-restoration of the earlier cache; it is not a replacement timing comparison.
+attribution from these single samples. The release checks above confirm
+restoration of the earlier cache; they are not replacement timing comparisons.
 
 All 24 original validation jobs completed both image builds and their tool
 checks. This includes three extra unchanged-source repeats, which are excluded
